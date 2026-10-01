@@ -2,7 +2,7 @@
 
 지원사업 공고의 원본과 수집 시점별 버전을 보존해 신규 등록과 변경을 추적하는 데이터 파이프라인입니다.
 
-현재는 K-Startup에서 모집 중인 지원사업 공고 API 수집부터 구현합니다. API 원본은 수정하지 않고 그대로 보관하며,
+현재는 K-Startup과 기업마당 지원사업 공고 API 수집부터 구현합니다. API 원본은 수정하지 않고 그대로 보관하며,
 후속 처리에서 사용하기 좋은 JSON Lines 스냅샷도 함께 생성합니다.
 
 ## 시작하기
@@ -13,6 +13,7 @@ Python 3.12 이상이 필요합니다.
 Copy-Item .env.example .env
 # .env에 공공데이터포털에서 확인한 API URL과 인증키를 입력합니다.
 python -m grant_radar collect kstartup
+python -m grant_radar collect bizinfo
 ```
 
 개발 설치를 사용하는 경우:
@@ -20,15 +21,17 @@ python -m grant_radar collect kstartup
 ```powershell
 python -m pip install -e .
 grant-radar collect kstartup
+grant-radar collect bizinfo
 ```
 
-수집 결과는 기본적으로 `data/raw/kstartup/<수집일>/<실행 ID>/`와
-`data/processed/kstartup/<수집일>/<실행 ID>/notices.jsonl`에 저장됩니다.
+수집 결과는 기본적으로 `data/raw/<출처>/<수집일>/<실행 ID>/`와
+`data/processed/<출처>/<수집일>/<실행 ID>/notices.jsonl`에 저장됩니다.
 
 실제 API를 호출하지 않고 응답 파일을 검증할 수도 있습니다.
 
 ```powershell
 python -m grant_radar parse-kstartup path/to/response.json
+python -m grant_radar parse-bizinfo path/to/response.json
 ```
 
 ## 로컬 Docker 인프라
@@ -78,6 +81,11 @@ docker compose --profile collector run --rm collector
 | `KSTARTUP_PAGE_SIZE` | 페이지당 수집 건수 | `100` |
 | `KSTARTUP_REQUEST_TIMEOUT_SECONDS` | 요청 제한 시간 | `30` |
 | `KSTARTUP_MAX_RETRIES` | 일시적 오류 재시도 횟수 | `3` |
+| `BIZINFO_API_URL` | 기업마당 지원사업정보 API URL | 공식 URL 내장 |
+| `BIZINFO_API_KEY` | 기업마당에서 발급받은 서비스 인증키 | 필수 |
+| `BIZINFO_PAGE_SIZE` | 기업마당 페이지당 수집 건수 | `100` |
+| `BIZINFO_REQUEST_TIMEOUT_SECONDS` | 기업마당 요청 제한 시간 | `30` |
+| `BIZINFO_MAX_RETRIES` | 기업마당 일시적 오류 재시도 횟수 | `3` |
 | `GRANT_RADAR_DATA_DIR` | 데이터 저장 위치 | `data` |
 | `GRANT_RADAR_PERSISTENCE` | 저장 방식. `local` 또는 `hybrid` | `local` |
 | `DATABASE_URL` | PostgreSQL 접속 URL | 로컬 Docker 기준값 |

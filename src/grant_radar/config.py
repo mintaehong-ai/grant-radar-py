@@ -11,6 +11,7 @@ DEFAULT_KSTARTUP_API_URL = (
     "https://apis.data.go.kr/B552735/"
     "kisedKstartupService01/getAnnouncementInformation01"
 )
+DEFAULT_BIZINFO_API_URL = "https://www.bizinfo.go.kr/uss/rss/bizinfoApi.do"
 
 
 class ConfigurationError(ValueError):
@@ -91,6 +92,44 @@ class KStartupSettings:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class BizinfoSettings:
+    """기업마당 한 번의 수집 실행에 필요한 설정 모음입니다."""
+
+    api_url: str
+    api_key: str
+    page_size: int = 100
+    timeout_seconds: float = 30.0
+    max_retries: int = 3
+    data_dir: Path = Path("data")
+    persistence: str = "local"
+    database_url: str | None = None
+    s3_endpoint_url: str | None = None
+    s3_access_key_id: str | None = None
+    s3_secret_access_key: str | None = None
+    s3_bucket_raw: str | None = None
+    s3_bucket_processed: str | None = None
+
+    @classmethod
+    def from_env(cls) -> "BizinfoSettings":
+        """기업마당 전용 인증키와 공통 저장소 설정을 함께 읽습니다."""
+        _load_dotenv(Path(".env"))
+        api_url = os.getenv("BIZINFO_API_URL", DEFAULT_BIZINFO_API_URL).strip()
+        api_key = os.getenv("BIZINFO_API_KEY", "").strip()
+        if not api_key:
+            raise ConfigurationError("BIZINFO_API_KEY 환경변수가 필요합니다.")
+
+        return cls(
+            api_url=api_url,
+            api_key=api_key,
+            page_size=_positive_int("BIZINFO_PAGE_SIZE", 100),
+            timeout_seconds=_positive_float("BIZINFO_REQUEST_TIMEOUT_SECONDS", 30.0),
+            max_retries=_positive_int("BIZINFO_MAX_RETRIES", 3),
+            data_dir=Path(os.getenv("GRANT_RADAR_DATA_DIR", "data")),
+            **_persistence_settings(),
+        )
+
+
 def _load_dotenv(path: Path) -> None:
     """외부 의존성 없이 로컬 개발용 .env의 단순 KEY=VALUE 형식을 읽습니다."""
     if not path.is_file():
@@ -135,3 +174,35 @@ def _optional_env(name: str) -> str | None:
     """빈 문자열은 설정하지 않은 값으로 취급해 검증 분기를 단순하게 유지합니다."""
     value = os.getenv(name, "").strip()
     return value or None
+
+
+def _persistence_settings() -> dict[str, str | None]:
+    """여러 수집기가 공통으로 쓰는 로컬/S3/PostgreSQL 저장소 설정을 검증합니다."""
+    persistence = os.getenv("GRANT_RADAR_PERSISTENCE", "local").strip().lower()
+    if persistence not in {"local", "hybrid"}:
+        raise ConfigurationError("GRANT_RADAR_PERSISTENCE는 local 또는 hybrid여야 합니다.")
+    settings = {
+        "persistence": persistence,
+        "database_url": _optional_env("DATABASE_URL"),
+        "s3_endpoint_url": _optional_env("S3_ENDPOINT_URL"),
+        "s3_access_key_id": _optional_env("S3_ACCESS_KEY_ID"),
+        "s3_secret_access_key": _optional_env("S3_SECRET_ACCESS_KEY"),
+        "s3_bucket_raw": _optional_env("S3_BUCKET_RAW"),
+        "s3_bucket_processed": _optional_env("S3_BUCKET_PROCESSED"),
+    }
+    if persistence == "hybrid":
+        missing = [
+            env_name
+            for env_name, key in {
+                "DATABASE_URL": "database_url",
+                "S3_ENDPOINT_URL": "s3_endpoint_url",
+                "S3_ACCESS_KEY_ID": "s3_access_key_id",
+                "S3_SECRET_ACCESS_KEY": "s3_secret_access_key",
+                "S3_BUCKET_RAW": "s3_bucket_raw",
+                "S3_BUCKET_PROCESSED": "s3_bucket_processed",
+            }.items()
+            if not settings[key]
+        ]
+        if missing:
+            raise ConfigurationError(f"hybrid 저장에는 {', '.join(missing)} 환경변수가 필요합니다.")
+    return settings
