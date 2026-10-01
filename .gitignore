@@ -216,3 +216,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+# 로컬 인증 정보와 수집 데이터는 저장소에 올리지 않습니다.
+.env
+data/
+*.egg-info/
+__pycache__/
+.pytest_cache/
+.ruff_cache/

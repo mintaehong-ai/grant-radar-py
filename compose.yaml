@@ -1,0 +1,87 @@
+# 로컬 개발용 인프라입니다. PostgreSQL은 메타데이터, LocalStack S3는 원본 파일 저장소 역할을 합니다.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: grant-radar-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-grant_radar}
+      POSTGRES_USER: ${POSTGRES_USER:-grant_radar}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-grant_radar_password}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  adminer:
+    image: adminer:latest
+    container_name: grant-radar-adminer
+    restart: unless-stopped
+    ports:
+      - "${ADMINER_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  localstack:
+    image: localstack/localstack:3.8
+    container_name: grant-radar-localstack
+    restart: unless-stopped
+    environment:
+      SERVICES: s3
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-ap-northeast-2}
+    ports:
+      - "${LOCALSTACK_PORT:-4566}:4566"
+    volumes:
+      - localstack_data:/var/lib/localstack
+
+  s3-init:
+    image: localstack/localstack:3.8
+    container_name: grant-radar-s3-init
+    depends_on:
+      - localstack
+    environment:
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-test}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-test}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-ap-northeast-2}
+      S3_BUCKET_RAW: ${S3_BUCKET_RAW:-grant-radar-raw}
+      S3_BUCKET_PROCESSED: ${S3_BUCKET_PROCESSED:-grant-radar-processed}
+    entrypoint: >
+      /bin/sh -c "
+      until awslocal --endpoint-url=http://localstack:4566 s3 ls >/dev/null 2>&1; do sleep 2; done &&
+      awslocal --endpoint-url=http://localstack:4566 s3 mb s3://$${S3_BUCKET_RAW} || true &&
+      awslocal --endpoint-url=http://localstack:4566 s3 mb s3://$${S3_BUCKET_PROCESSED} || true
+      "
+    restart: "no"
+
+  collector:
+    build: .
+    container_name: grant-radar-collector
+    profiles: ["collector"]
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-grant_radar}:${POSTGRES_PASSWORD:-grant_radar_password}@postgres:5432/${POSTGRES_DB:-grant_radar}
+      GRANT_RADAR_PERSISTENCE: hybrid
+      S3_ENDPOINT_URL: http://localstack:4566
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-test}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-test}
+      S3_BUCKET_RAW: ${S3_BUCKET_RAW:-grant-radar-raw}
+      S3_BUCKET_PROCESSED: ${S3_BUCKET_PROCESSED:-grant-radar-processed}
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      s3-init:
+        condition: service_completed_successfully
+    command: ["grant-radar", "collect", "kstartup"]
+
+volumes:
+  postgres_data:
+  localstack_data:

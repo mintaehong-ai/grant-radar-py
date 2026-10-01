@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "grant-radar"
+version = "0.1.0"
+description = "지원사업 공고의 원본과 변경 이력을 수집하는 데이터 파이프라인"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "boto3>=1.35",
+    "psycopg[binary]>=3.2",
+]
+
+[project.scripts]
+grant-radar = "grant_radar.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

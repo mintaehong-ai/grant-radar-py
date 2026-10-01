@@ -1,0 +1,9 @@
+# 이미지에는 실행에 필요한 소스만 넣고, 로컬 산출물과 비밀값은 제외합니다.
+.env
+.git
+.venv
+__pycache__
+*.egg-info
+data
+.pytest_cache
+.ruff_cache
